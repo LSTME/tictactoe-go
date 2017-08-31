@@ -9,6 +9,7 @@ import (
 	log "github.com/inconshreveable/log15"
 
 	"git.tumeo.eu/lstme/tictactoe-client/game"
+	"math"
 )
 
 type Mover struct {
@@ -94,7 +95,7 @@ func (this *Mover) blindMove() (x, y int ){
 
 func (this *Mover) masterMove(opponent_x, opponent_y int) (x, y int) {
 	var bestMove [2]int
-	var bestScore = -100*this.game.Plan.N*this.game.Plan.N
+	var bestScore = math.Inf(-1)
 	log.Debug("Calculating master move", "free_fields", this.game.Plan.FreeFields)
 	var possibilities = map[string][2]int{}
 	for k,v := range this.game.Plan.FreeFields {
@@ -102,7 +103,7 @@ func (this *Mover) masterMove(opponent_x, opponent_y int) (x, y int) {
 	}
 	for _, pos := range possibilities {
 		this.game.Plan.Move(this.game.PlayerID, pos[0], pos[1])
-		score := this.minimaxValue(&this.game.Plan, this.game.PlayersN - 1 - this.game.PlayerID, 0, pos[0], pos[1])
+		score := this.minimaxValue(&this.game.Plan, this.game.PlayersN - 1 - this.game.PlayerID, 0, pos[0], pos[1], math.Inf(-1), math.Inf(+1))
 		log.Debug("score for one of the free positions", "pos", pos, "score", score)
 		this.game.Plan.RevokeMove(this.game.PlayerID, pos[0], pos[1])
 		if score > bestScore {
@@ -114,22 +115,22 @@ func (this *Mover) masterMove(opponent_x, opponent_y int) (x, y int) {
 	return bestMove[0], bestMove[1]
 }
 
-func (this *Mover) minimaxValue(plan *game.GamePlan, player_on_move, depth, opponent_x, opponent_y int) int {
+func (this *Mover) minimaxValue(plan *game.GamePlan, player_on_move, depth, opponent_x, opponent_y int, alpha, beta float64) float64 {
 	if winner, won := plan.IsWinning(this.game.PlayersN - 1 - player_on_move, opponent_x, opponent_y); won {
 		if winner == this.game.PlayerID {
-			return 10 - depth
+			return float64(10 - depth)
 		} else if winner >= 0 {
-			return depth - 10
+			return float64(depth - 10)
 		} else {
 			return 0
 		}
 	}
 
-	var stateScore int
+	var stateScore float64
 	if player_on_move == this.game.PlayerID {
-		stateScore = -1000000
+		stateScore = math.Inf(-1)
 	} else {
-		stateScore = 1000000
+		stateScore = math.Inf(+1)
 	}
 
 	var possibilities = map[string][2]int{}
@@ -138,13 +139,19 @@ func (this *Mover) minimaxValue(plan *game.GamePlan, player_on_move, depth, oppo
 	}
 	for _, pos := range possibilities {
 		plan.Move(player_on_move, pos[0], pos[1])
-		score := this.minimaxValue(plan, this.game.PlayersN - 1 - player_on_move, depth + 1, pos[0], pos[1])
+		score := this.minimaxValue(plan, this.game.PlayersN - 1 - player_on_move, depth + 1, pos[0], pos[1], alpha, beta)
 		plan.RevokeMove(player_on_move, pos[0], pos[1])
 
-		if player_on_move == this.game.PlayerID && score > stateScore {
-			stateScore = score
-		} else if player_on_move != this.game.PlayerID && score < stateScore {
-			stateScore = score
+		if player_on_move == this.game.PlayerID{
+			stateScore = math.Max(stateScore, score)
+			alpha = math.Max(alpha, stateScore)
+		} else {
+			stateScore = math.Min(stateScore, score)
+			beta = math.Min(beta, stateScore)
+		}
+
+		if beta <= alpha {
+			break
 		}
 	}
 
