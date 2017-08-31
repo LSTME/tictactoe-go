@@ -1,0 +1,3 @@
+package: git.tumeo.eu/lstme/tictactoe-client
+import:
+- package: github.com/ulule/deepcopier

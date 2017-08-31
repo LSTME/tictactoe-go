@@ -1,0 +1,21 @@
+hash: e04673477e68a177b8d953696337e44d3b574371d6bc7a4ed4fee0a17441c158
+updated: 2017-08-30T13:34:47.82163322+02:00
+imports:
+- name: github.com/inconshreveable/log15
+  version: b105bd37f74e5d9dc7b6ad7806715c7a2b83fd3f
+- name: github.com/mattn/go-colorable
+  version: 6c0fd4aa6ec5818d5e3ea9e03ae436972a6c5a9a
+- name: github.com/mattn/go-isatty
+  version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
+- name: github.com/ulule/deepcopier
+  version: 0b647652460fbe4c522253a7d0781fdda962b370
+- name: golang.org/x/sys
+  version: e4594059fe4cde2daf423055a596c2cd1e6c9adf
+  subpackages:
+  - unix
+- name: gopkg.in/inconshreveable/log15.v2
+  version: b105bd37f74e5d9dc7b6ad7806715c7a2b83fd3f
+  subpackages:
+  - stack
+  - term
+testImports: []
