@@ -4,12 +4,15 @@ import (
 	"strings"
 	"strconv"
 	"reflect"
+	"math"
 	"math/rand"
 
 	log "github.com/inconshreveable/log15"
 
 	"git.tumeo.eu/lstme/tictactoe-client/game"
-	"math"
+	"encoding/gob"
+	"bytes"
+	"sync"
 )
 
 type Mover struct {
@@ -97,20 +100,53 @@ func (this *Mover) masterMove(opponent_x, opponent_y int) (x, y int) {
 	var bestMove [2]int
 	var bestScore = math.Inf(-1)
 	log.Debug("Calculating master move", "free_fields", this.game.Plan.FreeFields)
-	var possibilities = map[string][2]int{}
+
+	type ScoreMessage struct {
+		Score float64
+		Move [2]int
+	}
+
+	var (
+		waiter_workers sync.WaitGroup
+		mutex sync.Mutex
+		score_channel = make(chan ScoreMessage, 16)
+		possibilities = map[string][2]int{}
+	)
 	for k,v := range this.game.Plan.FreeFields {
 		possibilities[k] = v
 	}
 	for _, pos := range possibilities {
-		this.game.Plan.Move(this.game.PlayerID, pos[0], pos[1])
-		score := this.minimaxValue(&this.game.Plan, this.game.PlayersN - 1 - this.game.PlayerID, 0, pos[0], pos[1], math.Inf(-1), math.Inf(+1))
-		log.Debug("score for one of the free positions", "pos", pos, "score", score)
-		this.game.Plan.RevokeMove(this.game.PlayerID, pos[0], pos[1])
-		if score > bestScore {
-			bestScore = score
-			bestMove = pos
+		var buf bytes.Buffer
+		var plan game.GamePlan
+		enc := gob.NewEncoder(&buf)
+		dec := gob.NewDecoder(&buf)
+		err := enc.Encode(this.game.Plan)
+		err = dec.Decode(&plan)
+		if err != nil {
+			panic(err)
 		}
+		waiter_workers.Add(1)
+
+		go func(plan game.GamePlan, pos [2]int) {
+			plan.Move(this.game.PlayerID, pos[0], pos[1])
+			score := this.minimaxValue(&plan, this.game.PlayersN - 1 - this.game.PlayerID, 0, pos[0], pos[1], math.Inf(-1), math.Inf(+1))
+			log.Debug("score for one of the free positions", "pos", pos, "score", score)
+			plan.RevokeMove(this.game.PlayerID, pos[0], pos[1])
+			score_channel <- ScoreMessage{
+				Score: score,
+				Move: pos,
+			}
+			mutex.Lock()
+			if score > bestScore {
+				bestScore = score
+				bestMove = pos
+			}
+			mutex.Unlock()
+			waiter_workers.Done()
+		}(plan, pos)
 	}
+	waiter_workers.Wait()
+	close(score_channel)
 	log.Debug("After master move", "free_fields", this.game.Plan.FreeFields)
 	return bestMove[0], bestMove[1]
 }
@@ -118,9 +154,9 @@ func (this *Mover) masterMove(opponent_x, opponent_y int) (x, y int) {
 func (this *Mover) minimaxValue(plan *game.GamePlan, player_on_move, depth, opponent_x, opponent_y int, alpha, beta float64) float64 {
 	if winner, won := plan.IsWinning(this.game.PlayersN - 1 - player_on_move, opponent_x, opponent_y); won {
 		if winner == this.game.PlayerID {
-			return float64(10 - depth)
+			return float64(100 - depth)
 		} else if winner >= 0 {
-			return float64(depth - 10)
+			return float64(depth - 100)
 		} else {
 			return 0
 		}
@@ -134,7 +170,7 @@ func (this *Mover) minimaxValue(plan *game.GamePlan, player_on_move, depth, oppo
 	}
 
 	var possibilities = map[string][2]int{}
-	for k,v := range this.game.Plan.FreeFields {
+	for k,v := range plan.FreeFields {
 		possibilities[k] = v
 	}
 	for _, pos := range possibilities {
@@ -155,5 +191,5 @@ func (this *Mover) minimaxValue(plan *game.GamePlan, player_on_move, depth, oppo
 		}
 	}
 
-	return stateScore
+	return stateScore + 1
 }
